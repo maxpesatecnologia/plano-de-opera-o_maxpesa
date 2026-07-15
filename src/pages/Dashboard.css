@@ -1,0 +1,39 @@
+.dashboard-map {
+  height: 320px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.top-clientes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.top-cliente-row {
+  display: grid;
+  grid-template-columns: 24px 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+}
+.top-cliente-rank {
+  font-family: 'Oswald', sans-serif;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+.top-cliente-bar-track {
+  height: 6px;
+  background: var(--column-bg);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+.top-cliente-bar-fill {
+  height: 100%;
+  background: var(--primary-color);
+  border-radius: 3px;
+}
+.top-cliente-value {
+  font-weight: 700;
+  white-space: nowrap;
+}

@@ -1,0 +1,48 @@
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.calendar-weekday {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding-bottom: 4px;
+}
+.calendar-day {
+  background: var(--surface-color);
+  border-radius: var(--radius-md);
+  min-height: 88px;
+  padding: 0.4rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.calendar-day:hover { border-color: var(--primary-color); }
+.calendar-day.empty { background: transparent; cursor: default; }
+.calendar-day.selected { border-color: var(--primary-color); box-shadow: var(--shadow-sm); }
+.calendar-day .day-number { font-weight: 700; font-size: 0.8rem; }
+.calendar-day .event-dot {
+  font-size: 0.62rem;
+  border-radius: 4px;
+  padding: 1px 4px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.event-vencimento { background: #E30613; }
+.event-medicao { background: #3182CE; }
+.event-aprovacao { background: #38A169; }
+.event-faturamento { background: #FF6A00; }
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}

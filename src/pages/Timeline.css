@@ -1,0 +1,51 @@
+.timeline-row {
+  background: var(--surface-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.timeline-row-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+  font-size: 0.85rem;
+}
+.timeline-steps {
+  display: flex;
+  align-items: center;
+}
+.timeline-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  flex: 1;
+  position: relative;
+}
+.timeline-step .dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 3px solid;
+}
+.timeline-step .label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.timeline-step .line {
+  position: absolute;
+  top: 7px;
+  right: 50%;
+  width: 100%;
+  height: 3px;
+  z-index: -1;
+}
+.timeline-step:first-child .line { display: none; }
+
+.status-concluido .dot, .status-concluido .line { background: var(--success-color); border-color: var(--success-color); }
+.status-andamento .dot, .status-andamento .line { background: var(--info-color); border-color: var(--info-color); }
+.status-atrasado .dot, .status-atrasado .line { background: var(--danger-color); border-color: var(--danger-color); }
