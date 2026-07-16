@@ -8,13 +8,13 @@ export const usePlano = () => useContext(PlanoContext);
 
 const PLANO_SELECT = `
   *,
-  cliente:clientes(*),
-  gerente:gerentes(*),
-  obra:obras(*),
-  equipamento:equipamentos(*),
-  faturamentos(*),
-  medicoes(*),
-  terceiros(*)
+  cliente:po_clientes(*),
+  gerente:po_gerentes(*),
+  obra:po_obras(*),
+  equipamento:po_equipamentos(*),
+  faturamentos:po_faturamentos(*),
+  medicoes:po_medicoes(*),
+  terceiros:po_terceiros(*)
 `;
 
 export const PlanoProvider = ({ children }) => {
@@ -30,10 +30,10 @@ export const PlanoProvider = ({ children }) => {
   const loadLookups = useCallback(async () => {
     try {
       const [c, g, o, e] = await Promise.all([
-        supabase.from('clientes').select('*').order('nome'),
-        supabase.from('gerentes').select('*').order('nome'),
-        supabase.from('obras').select('*').order('nome'),
-        supabase.from('equipamentos').select('*').order('placa'),
+        supabase.from('po_clientes').select('*').order('nome'),
+        supabase.from('po_gerentes').select('*').order('nome'),
+        supabase.from('po_obras').select('*').order('nome'),
+        supabase.from('po_equipamentos').select('*').order('placa'),
       ]);
       setClientes(c.data || []);
       setGerentes(g.data || []);
@@ -47,7 +47,7 @@ export const PlanoProvider = ({ children }) => {
   const loadPlanos = useCallback(async () => {
     try {
       const { data, error } = await supabase
-        .from('planos_operacao')
+        .from('po_planos_operacao')
         .select(PLANO_SELECT)
         .order('created_at', { ascending: false })
         .range(0, 9999);
@@ -67,7 +67,7 @@ export const PlanoProvider = ({ children }) => {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const addPlano = useCallback(async (payload) => {
-    const { data, error } = await supabase.from('planos_operacao').insert(payload).select(PLANO_SELECT).single();
+    const { data, error } = await supabase.from('po_planos_operacao').insert(payload).select(PLANO_SELECT).single();
     if (error) { toast?.error(`Erro ao criar plano: ${error.message}`); throw error; }
     setPlanos((prev) => [data, ...prev]);
     toast?.success('Plano criado com sucesso');
@@ -75,7 +75,7 @@ export const PlanoProvider = ({ children }) => {
   }, [toast]);
 
   const updatePlano = useCallback(async (id, payload) => {
-    const { data, error } = await supabase.from('planos_operacao').update(payload).eq('id', id).select(PLANO_SELECT).single();
+    const { data, error } = await supabase.from('po_planos_operacao').update(payload).eq('id', id).select(PLANO_SELECT).single();
     if (error) { toast?.error(`Erro ao atualizar plano: ${error.message}`); throw error; }
     setPlanos((prev) => prev.map((p) => (p.id === id ? data : p)));
     toast?.success('Plano atualizado');
@@ -83,7 +83,7 @@ export const PlanoProvider = ({ children }) => {
   }, [toast]);
 
   const deletePlano = useCallback(async (id) => {
-    const { error } = await supabase.from('planos_operacao').delete().eq('id', id);
+    const { error } = await supabase.from('po_planos_operacao').delete().eq('id', id);
     if (error) { toast?.error(`Erro ao excluir plano: ${error.message}`); throw error; }
     setPlanos((prev) => prev.filter((p) => p.id !== id));
     toast?.success('Plano excluído');
@@ -122,11 +122,11 @@ export const PlanoProvider = ({ children }) => {
 
       const resolved = [];
       for (const row of rows) {
-        const cliente_id = await getOrCreateLookup('clientes', 'nome', row.cliente, {}, setClientes, clientesCache);
-        const gerente_id = await getOrCreateLookup('gerentes', 'nome', row.gerente, {}, setGerentes, gerentesCache);
-        const obra_id = await getOrCreateLookup('obras', 'nome', row.obra, {}, setObras, obrasCache);
+        const cliente_id = await getOrCreateLookup('po_clientes', 'nome', row.cliente, {}, setClientes, clientesCache);
+        const gerente_id = await getOrCreateLookup('po_gerentes', 'nome', row.gerente, {}, setGerentes, gerentesCache);
+        const obra_id = await getOrCreateLookup('po_obras', 'nome', row.obra, {}, setObras, obrasCache);
         const equipamento_id = row.placa
-          ? await getOrCreateLookup('equipamentos', 'placa', row.placa, { tipo: row.equipamentoTipo }, setEquipamentos, equipamentosCache)
+          ? await getOrCreateLookup('po_equipamentos', 'placa', row.placa, { tipo: row.equipamentoTipo }, setEquipamentos, equipamentosCache)
           : null;
 
         resolved.push({
@@ -163,9 +163,32 @@ export const PlanoProvider = ({ children }) => {
       }
 
       const CHUNK = 500;
+      const faturamentosToInsert = [];
       for (let i = 0; i < resolved.length; i += CHUNK) {
         const chunk = resolved.slice(i, i + CHUNK);
-        const { error } = await supabase.from('planos_operacao').insert(chunk);
+        const { data: inserted, error } = await supabase.from('po_planos_operacao').insert(chunk).select('id');
+        if (error) throw error;
+
+        // Planos já faturados na planilha (status "faturado" ou com NF preenchida) geram
+        // o registro correspondente em po_faturamentos — sem isso, Receita Faturada e
+        // Receita Mensal ficam zeradas mesmo com dados reais importados.
+        inserted.forEach((row, idx) => {
+          const plano = chunk[idx];
+          if (plano.status_fatura === 'faturado' || plano.numero_nf) {
+            faturamentosToInsert.push({
+              plano_id: row.id,
+              numero_nf: plano.numero_nf || null,
+              valor: plano.receita || 0,
+              data_emissao: plano.data_aprovacao_medicao || plano.vencimento_medicao || null,
+              status: 'pendente',
+            });
+          }
+        });
+      }
+
+      for (let i = 0; i < faturamentosToInsert.length; i += CHUNK) {
+        const chunk = faturamentosToInsert.slice(i, i + CHUNK);
+        const { error } = await supabase.from('po_faturamentos').insert(chunk);
         if (error) throw error;
       }
 
@@ -187,11 +210,11 @@ export const PlanoProvider = ({ children }) => {
     const obrasCache = [...obras];
     const equipamentosCache = [...equipamentos];
 
-    const cliente_id = await getOrCreateLookup('clientes', 'nome', form.clienteNome, { cidade: form.cidade, uf: form.uf }, setClientes, clientesCache);
-    const gerente_id = await getOrCreateLookup('gerentes', 'nome', form.gerenteNome, {}, setGerentes, gerentesCache);
-    const obra_id = await getOrCreateLookup('obras', 'nome', form.obraNome || form.cidade, { cidade: form.cidade, uf: form.uf }, setObras, obrasCache);
+    const cliente_id = await getOrCreateLookup('po_clientes', 'nome', form.clienteNome, { cidade: form.cidade, uf: form.uf }, setClientes, clientesCache);
+    const gerente_id = await getOrCreateLookup('po_gerentes', 'nome', form.gerenteNome, {}, setGerentes, gerentesCache);
+    const obra_id = await getOrCreateLookup('po_obras', 'nome', form.obraNome || form.cidade, { cidade: form.cidade, uf: form.uf }, setObras, obrasCache);
     const equipamento_id = form.placa
-      ? await getOrCreateLookup('equipamentos', 'placa', form.placa, { tipo: form.equipamentoTipo }, setEquipamentos, equipamentosCache)
+      ? await getOrCreateLookup('po_equipamentos', 'placa', form.placa, { tipo: form.equipamentoTipo }, setEquipamentos, equipamentosCache)
       : null;
 
     const payload = {

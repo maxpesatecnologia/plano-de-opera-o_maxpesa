@@ -13,7 +13,10 @@ function isAtivo(plano) {
 export function computeIndicadores(planos) {
   const ativos = planos.filter(isAtivo);
 
-  const receitaPrevista = sum(ativos, (p) => p.projecao_anual);
+  // Prevista soma TODOS os planos (não só os ativos) para ser comparável com a Faturada
+  // (que também é acumulada de todo o histórico) — senão "Em Aberto" fica negativo sempre
+  // que o total já faturado supera a projeção só dos planos ainda em andamento.
+  const receitaPrevista = sum(planos, (p) => p.projecao_anual);
 
   const todasFaturamentos = planos.flatMap((p) => p.faturamentos || []);
   const receitaFaturada = sum(todasFaturamentos, (f) => f.valor);

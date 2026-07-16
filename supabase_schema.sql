@@ -1,12 +1,13 @@
 -- ============================================================
 -- Plano de Operação - Faturamento (Maxpesa)
 -- Schema Supabase (PostgreSQL) — executar no SQL Editor do Supabase
+-- Modificado para usar prefixo po_ 
 -- ============================================================
 
 create extension if not exists "pgcrypto";
 
 -- ── Clientes ──────────────────────────────────────────────────
-create table if not exists clientes (
+create table if not exists po_clientes (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
   cnpj text,
@@ -16,7 +17,7 @@ create table if not exists clientes (
 );
 
 -- ── Gerentes de Contrato ──────────────────────────────────────
-create table if not exists gerentes (
+create table if not exists po_gerentes (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
   email text,
@@ -24,7 +25,7 @@ create table if not exists gerentes (
 );
 
 -- ── Obras (local da operação) ─────────────────────────────────
-create table if not exists obras (
+create table if not exists po_obras (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
   cidade text,
@@ -35,7 +36,7 @@ create table if not exists obras (
 );
 
 -- ── Equipamentos ──────────────────────────────────────────────
-create table if not exists equipamentos (
+create table if not exists po_equipamentos (
   id uuid primary key default gen_random_uuid(),
   placa text,
   tipo text,
@@ -45,7 +46,7 @@ create table if not exists equipamentos (
 );
 
 -- ── Usuários (perfis de acesso) ───────────────────────────────
-create table if not exists usuarios (
+create table if not exists po_usuarios (
   id uuid primary key default gen_random_uuid(),
   nome text not null,
   email text unique not null,
@@ -55,13 +56,13 @@ create table if not exists usuarios (
 );
 
 -- ── Planos de Operação (tabela principal) ─────────────────────
-create table if not exists planos_operacao (
+create table if not exists po_planos_operacao (
   id uuid primary key default gen_random_uuid(),
-  cliente_id uuid references clientes(id),
+  cliente_id uuid references po_clientes(id),
   numero_plano text,
-  equipamento_id uuid references equipamentos(id),
-  obra_id uuid references obras(id),
-  gerente_id uuid references gerentes(id),
+  equipamento_id uuid references po_equipamentos(id),
+  obra_id uuid references po_obras(id),
+  gerente_id uuid references po_gerentes(id),
 
   vencimento_medicao date,
   data_envio_medicao date,
@@ -100,16 +101,16 @@ create table if not exists planos_operacao (
   updated_at timestamptz default now()
 );
 
-create index if not exists idx_planos_cliente on planos_operacao(cliente_id);
-create index if not exists idx_planos_gerente on planos_operacao(gerente_id);
-create index if not exists idx_planos_obra on planos_operacao(obra_id);
-create index if not exists idx_planos_equipamento on planos_operacao(equipamento_id);
-create index if not exists idx_planos_status on planos_operacao(status_fatura);
+create index if not exists idx_po_planos_cliente on po_planos_operacao(cliente_id);
+create index if not exists idx_po_planos_gerente on po_planos_operacao(gerente_id);
+create index if not exists idx_po_planos_obra on po_planos_operacao(obra_id);
+create index if not exists idx_po_planos_equipamento on po_planos_operacao(equipamento_id);
+create index if not exists idx_po_planos_status on po_planos_operacao(status_fatura);
 
 -- ── Medições ──────────────────────────────────────────────────
-create table if not exists medicoes (
+create table if not exists po_medicoes (
   id uuid primary key default gen_random_uuid(),
-  plano_id uuid references planos_operacao(id) on delete cascade,
+  plano_id uuid references po_planos_operacao(id) on delete cascade,
   data_medicao date,
   status text default 'pendente' check (status in ('pendente','aprovada','atrasada')),
   aprovado_em timestamptz,
@@ -117,9 +118,9 @@ create table if not exists medicoes (
 );
 
 -- ── Faturamentos (uma linha por NF emitida) ───────────────────
-create table if not exists faturamentos (
+create table if not exists po_faturamentos (
   id uuid primary key default gen_random_uuid(),
-  plano_id uuid references planos_operacao(id) on delete cascade,
+  plano_id uuid references po_planos_operacao(id) on delete cascade,
   numero_nf text,
   valor numeric,
   data_emissao date,
@@ -128,13 +129,13 @@ create table if not exists faturamentos (
   created_at timestamptz default now()
 );
 
-create index if not exists idx_faturamentos_plano on faturamentos(plano_id);
-create index if not exists idx_faturamentos_emissao on faturamentos(data_emissao);
+create index if not exists idx_po_faturamentos_plano on po_faturamentos(plano_id);
+create index if not exists idx_po_faturamentos_emissao on po_faturamentos(data_emissao);
 
 -- ── Terceiros (custos por plano) ──────────────────────────────
-create table if not exists terceiros (
+create table if not exists po_terceiros (
   id uuid primary key default gen_random_uuid(),
-  plano_id uuid references planos_operacao(id) on delete cascade,
+  plano_id uuid references po_planos_operacao(id) on delete cascade,
   fornecedor text,
   horas numeric,
   custo numeric,
@@ -142,9 +143,9 @@ create table if not exists terceiros (
 );
 
 -- ── Anexos ────────────────────────────────────────────────────
-create table if not exists anexos (
+create table if not exists po_anexos (
   id uuid primary key default gen_random_uuid(),
-  plano_id uuid references planos_operacao(id) on delete cascade,
+  plano_id uuid references po_planos_operacao(id) on delete cascade,
   tipo text check (tipo in ('foto','documento')),
   url text,
   nome text,
@@ -152,18 +153,18 @@ create table if not exists anexos (
 );
 
 -- ── Histórico de Alterações (audit trail) ─────────────────────
-create table if not exists historico_alteracoes (
+create table if not exists po_historico_alteracoes (
   id uuid primary key default gen_random_uuid(),
-  plano_id uuid references planos_operacao(id) on delete cascade,
-  usuario_id uuid references usuarios(id),
+  plano_id uuid references po_planos_operacao(id) on delete cascade,
+  usuario_id uuid references po_usuarios(id),
   campo text,
   valor_anterior text,
   valor_novo text,
   data timestamptz default now()
 );
 
--- ── Trigger: updated_at automático em planos_operacao ─────────
-create or replace function set_updated_at()
+-- ── Trigger: updated_at automático em po_planos_operacao ─────────
+create or replace function set_po_updated_at()
 returns trigger as $$
 begin
   new.updated_at = now();
@@ -171,7 +172,7 @@ begin
 end;
 $$ language plpgsql;
 
-drop trigger if exists trg_planos_updated_at on planos_operacao;
-create trigger trg_planos_updated_at
-  before update on planos_operacao
-  for each row execute function set_updated_at();
+drop trigger if exists trg_po_planos_updated_at on po_planos_operacao;
+create trigger trg_po_planos_updated_at
+  before update on po_planos_operacao
+  for each row execute function set_po_updated_at();

@@ -99,8 +99,12 @@
 }
 
 /* ── Tabela ─────────────────────────────────────────────── */
+/* Altura travada + overflow próprio: mantém a barra de rolagem horizontal sempre visível
+   no rodapé da tabela, em vez de só aparecer depois de rolar por todas as linhas. */
 .table-wrapper {
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: calc(100vh - 260px);
   background: var(--surface-color);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
@@ -111,6 +115,9 @@
   font-size: 0.85rem;
 }
 .data-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   text-align: left;
   padding: 0.75rem 1rem;
   background: var(--column-bg);

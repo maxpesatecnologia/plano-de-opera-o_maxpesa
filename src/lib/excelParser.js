@@ -10,15 +10,40 @@ const norm = (s) =>
     .replace(/[cç]/g, 'c')
     .replace(/[^a-z0-9]/g, '');
 
-const str = (v) => (v !== undefined && v !== null) ? String(v).trim() : '';
+// Data digitada como texto solto (ex: "Janeiro") às vezes é auto-convertida pelo Excel
+// para uma célula de data de verdade — nesses casos formatamos como dd/mm/aaaa em vez do
+// Date.toString() verboso do JS.
+const dateToBr = (v) => {
+  const dd = String(v.getDate()).padStart(2, '0');
+  const mm = String(v.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${v.getFullYear()}`;
+};
+
+const str = (v) => {
+  if (v === undefined || v === null) return '';
+  if (v instanceof Date) return dateToBr(v);
+  return String(v).trim();
+};
 
 const num = (v) => {
-  if (v === undefined || v === null || v === '') return null;
+  if (v === undefined || v === null || v === '' || v instanceof Date) return null;
+  // Célula numérica nativa do Excel: já é um float de verdade, não precisa (e não deve)
+  // passar pela limpeza de formato brasileiro — isso corromperia o ponto decimal.
+  if (typeof v === 'number') return Number.isNaN(v) ? null : v;
   const n = parseFloat(String(v).replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '') || String(v).replace(',', '.'));
   return Number.isNaN(n) ? null : n;
 };
 
 const bool = (v) => ['sim', 's', 'yes', 'y', 'true', '1'].includes(String(v).trim().toLowerCase());
+
+const MESES_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+// "Mês Faturamento" é um mês por extenso (ex: "Janeiro") — se o Excel converteu a célula
+// para data de verdade, extrai o nome do mês em vez de formatar como dd/mm/aaaa.
+const mesFaturamentoStr = (v) => {
+  if (v instanceof Date) return MESES_PT[v.getMonth()];
+  return str(v);
+};
 
 const toIsoDate = (v) => {
   if (!v) return null;
@@ -68,108 +93,112 @@ export const TEMPLATE_HEADERS = [
   'Mês Faturamento 2', 'Mês Faturamento',
 ];
 
+// Núcleo puro do parsing — recebe um workbook já lido (xlsx) e devolve as linhas normalizadas.
+// Separado de parsePlanoExcel para poder ser testado fora do navegador (sem FileReader).
+export function parseWorkbookRows(wb) {
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+
+  if (grid.length < 2) return [];
+
+  const headerRow = grid[0].map((h) => str(h));
+  const dataRows = grid.slice(1).filter((r) => r.some((c) => c !== ''));
+  const normHeaders = headerRow.map(norm);
+
+  // Retorna todas as posições de coluna cujo cabeçalho normalizado bate com algum alias
+  const findAllIdx = (...aliases) => {
+    const normAliases = aliases.map(norm);
+    return normHeaders.reduce((acc, h, i) => {
+      if (normAliases.includes(h)) acc.push(i);
+      return acc;
+    }, []);
+  };
+  const findIdx = (...aliases) => findAllIdx(...aliases)[0] ?? -1;
+  const get = (row, idx) => (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : '';
+
+  const idxCliente = findIdx('cliente', 'razao social', 'nome cliente');
+  const idxNumeroPlano = findIdx('nº do plano', 'numero do plano', 'numero plano', 'plano');
+  const idxVencimentoMedicao = findIdx('vencimento da medicao', 'vencimento medicao');
+  const idxDataEnvioMedicao = findIdx('data envio medicao', 'data de envio medicao');
+  const idxDataAprovacaoMedicao = findIdx('data aprovacao medicao', 'data de aprovacao medicao');
+  const idxEmitidoFatura = findIdx('emitido fatura?', 'emitido fatura');
+  const idxStatusFatura = findIdx('status da fatura', 'status fatura', 'status');
+  const idxPlaca = findIdx('placa');
+  const idxEquipamento = findIdx('equipamento', 'tipo equipamento', 'descricao equipamento');
+  const idxInicioOriginal = findIdx('inicio original');
+  const idxTerminoOriginal = findIdx('termino original');
+  const idxInicioAjustado = findIdx('inicio ajustado');
+  const idxTerminoAjustado = findIdx('termino ajustado');
+
+  // "Dias operação" aparece duplicado: 1ª ocorrência = original, 2ª = ajustado
+  const diasIdxs = findAllIdx('dias operacao', 'dias operacao ajustado', 'dias');
+  const idxDiasOriginal = diasIdxs[0] ?? -1;
+  const idxDiasAjustado = diasIdxs[1] ?? diasIdxs[0] ?? -1;
+
+  const idxValorHora = findIdx('valor c/ iss por hora / mes', 'valor hora', 'valor por hora');
+  const idxHorasContratuais = findIdx('qtde hora/mes contratual', 'horas contratuais', 'horas contrato');
+  const idxMobi = findIdx('mobi', 'mobilizacao');
+  const idxDesmobi = findIdx('desmobi', 'desmobilizacao');
+  const idxValorProvisionado = findIdx('provisionado', 'valor provisionado', 'provisao');
+  const idxReceita = findIdx('valor da receita', 'receita', 'valor faturado');
+  const idxProjecaoAnual = findIdx('projecao anual', 'projecao');
+  const idxCrescimento = findIdx('crescimento');
+  const idxGerente = findIdx('gerente contrato', 'gerente do contrato', 'gerente', 'responsavel');
+  const idxObra = findIdx('local obra', 'local da obra', 'obra', 'local');
+  const idxCustoTerceiro = findIdx('valor de 3º a pagar', 'valor de 3 a pagar', 'custo terceiro', 'custo de terceiros');
+  const idxCustoHoraTerceiro = findIdx('custo hs terceiro');
+  const idxHorasTerceiro = findIdx('qtde hs terceiro', 'horas terceiro', 'horas terceiros');
+  const idxNumeroNf = findIdx('fatura nf nº', 'fatura nf n', 'numero nf', 'nf', 'nota fiscal');
+  const idxNumeroLocacao = findIdx('fatura locacao nº', 'fatura locacao n', 'numero locacao');
+  // "Mês Faturamento" e "Mês Faturamento 2" são a mesma informação duplicada na planilha —
+  // usa a coluna sem sufixo; se só existir a com sufixo "2", usa ela como alternativa.
+  const idxMesFaturamento = findIdx('mes faturamento') !== -1 ? findIdx('mes faturamento') : findIdx('mes faturamento 2');
+  const idxObservacoes = findIdx('observacoes', 'observacao', 'obs');
+
+  return dataRows.map((row) => ({
+    cliente: str(get(row, idxCliente)),
+    numeroPlano: str(get(row, idxNumeroPlano)),
+    vencimentoMedicao: toIsoDate(get(row, idxVencimentoMedicao)),
+    dataEnvioMedicao: toIsoDate(get(row, idxDataEnvioMedicao)),
+    dataAprovacaoMedicao: toIsoDate(get(row, idxDataAprovacaoMedicao)),
+    emitidoFatura: bool(get(row, idxEmitidoFatura)),
+    equipamentoTipo: str(get(row, idxEquipamento)),
+    placa: str(get(row, idxPlaca)),
+    gerente: str(get(row, idxGerente)),
+    obra: str(get(row, idxObra)),
+    inicioOriginal: toIsoDate(get(row, idxInicioOriginal)),
+    terminoOriginal: toIsoDate(get(row, idxTerminoOriginal)),
+    diasOriginal: num(get(row, idxDiasOriginal)),
+    inicioAjustado: toIsoDate(get(row, idxInicioAjustado)) || toIsoDate(get(row, idxInicioOriginal)),
+    terminoAjustado: toIsoDate(get(row, idxTerminoAjustado)) || toIsoDate(get(row, idxTerminoOriginal)),
+    dias: num(get(row, idxDiasAjustado)),
+    valorHora: num(get(row, idxValorHora)),
+    horasContratuais: num(get(row, idxHorasContratuais)),
+    mobi: num(get(row, idxMobi)) || 0,
+    desmobi: num(get(row, idxDesmobi)) || 0,
+    valorProvisionado: num(get(row, idxValorProvisionado)) || 0,
+    receita: num(get(row, idxReceita)) || 0,
+    projecaoAnual: num(get(row, idxProjecaoAnual)) || 0,
+    crescimento: num(get(row, idxCrescimento)),
+    fornecedorTerceiro: '',
+    custoHoraTerceiro: num(get(row, idxCustoHoraTerceiro)) || 0,
+    horasTerceiro: num(get(row, idxHorasTerceiro)) || 0,
+    custoTerceiro: num(get(row, idxCustoTerceiro)) || 0,
+    statusFatura: normalizeStatus(get(row, idxStatusFatura)),
+    numeroNf: str(get(row, idxNumeroNf)),
+    numeroLocacao: str(get(row, idxNumeroLocacao)),
+    mesFaturamento: mesFaturamentoStr(get(row, idxMesFaturamento)),
+    observacoes: str(get(row, idxObservacoes)),
+  })).filter((r) => r.cliente || r.numeroPlano);
+}
+
 export const parsePlanoExcel = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const grid = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-
-        if (grid.length < 2) { resolve([]); return; }
-
-        const headerRow = grid[0].map((h) => str(h));
-        const dataRows = grid.slice(1).filter((r) => r.some((c) => c !== ''));
-        const normHeaders = headerRow.map(norm);
-
-        // Retorna todas as posições de coluna cujo cabeçalho normalizado bate com algum alias
-        const findAllIdx = (...aliases) => {
-          const normAliases = aliases.map(norm);
-          return normHeaders.reduce((acc, h, i) => {
-            if (normAliases.includes(h)) acc.push(i);
-            return acc;
-          }, []);
-        };
-        const findIdx = (...aliases) => findAllIdx(...aliases)[0] ?? -1;
-        const get = (row, idx) => (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : '';
-
-        const idxCliente = findIdx('cliente', 'razao social', 'nome cliente');
-        const idxNumeroPlano = findIdx('nº do plano', 'numero do plano', 'numero plano', 'plano');
-        const idxVencimentoMedicao = findIdx('vencimento da medicao', 'vencimento medicao');
-        const idxDataEnvioMedicao = findIdx('data envio medicao', 'data de envio medicao');
-        const idxDataAprovacaoMedicao = findIdx('data aprovacao medicao', 'data de aprovacao medicao');
-        const idxEmitidoFatura = findIdx('emitido fatura?', 'emitido fatura');
-        const idxStatusFatura = findIdx('status da fatura', 'status fatura', 'status');
-        const idxPlaca = findIdx('placa');
-        const idxEquipamento = findIdx('equipamento', 'tipo equipamento', 'descricao equipamento');
-        const idxInicioOriginal = findIdx('inicio original');
-        const idxTerminoOriginal = findIdx('termino original');
-        const idxInicioAjustado = findIdx('inicio ajustado');
-        const idxTerminoAjustado = findIdx('termino ajustado');
-
-        // "Dias operação" aparece duplicado: 1ª ocorrência = original, 2ª = ajustado
-        const diasIdxs = findAllIdx('dias operacao', 'dias operacao ajustado', 'dias');
-        const idxDiasOriginal = diasIdxs[0] ?? -1;
-        const idxDiasAjustado = diasIdxs[1] ?? diasIdxs[0] ?? -1;
-
-        const idxValorHora = findIdx('valor c/ iss por hora / mes', 'valor hora', 'valor por hora');
-        const idxHorasContratuais = findIdx('qtde hora/mes contratual', 'horas contratuais', 'horas contrato');
-        const idxMobi = findIdx('mobi', 'mobilizacao');
-        const idxDesmobi = findIdx('desmobi', 'desmobilizacao');
-        const idxValorProvisionado = findIdx('provisionado', 'valor provisionado', 'provisao');
-        const idxReceita = findIdx('valor da receita', 'receita', 'valor faturado');
-        const idxProjecaoAnual = findIdx('projecao anual', 'projecao');
-        const idxCrescimento = findIdx('crescimento');
-        const idxGerente = findIdx('gerente contrato', 'gerente do contrato', 'gerente', 'responsavel');
-        const idxObra = findIdx('local obra', 'local da obra', 'obra', 'local');
-        const idxCustoTerceiro = findIdx('valor de 3º a pagar', 'valor de 3 a pagar', 'custo terceiro', 'custo de terceiros');
-        const idxCustoHoraTerceiro = findIdx('custo hs terceiro');
-        const idxHorasTerceiro = findIdx('qtde hs terceiro', 'horas terceiro', 'horas terceiros');
-        const idxNumeroNf = findIdx('fatura nf nº', 'fatura nf n', 'numero nf', 'nf', 'nota fiscal');
-        const idxNumeroLocacao = findIdx('fatura locacao nº', 'fatura locacao n', 'numero locacao');
-        // "Mês Faturamento" e "Mês Faturamento 2" são a mesma informação duplicada na planilha —
-        // usa a coluna sem sufixo; se só existir a com sufixo "2", usa ela como alternativa.
-        const idxMesFaturamento = findIdx('mes faturamento') !== -1 ? findIdx('mes faturamento') : findIdx('mes faturamento 2');
-        const idxObservacoes = findIdx('observacoes', 'observacao', 'obs');
-
-        const parsed = dataRows.map((row) => ({
-          cliente: str(get(row, idxCliente)),
-          numeroPlano: str(get(row, idxNumeroPlano)),
-          vencimentoMedicao: toIsoDate(get(row, idxVencimentoMedicao)),
-          dataEnvioMedicao: toIsoDate(get(row, idxDataEnvioMedicao)),
-          dataAprovacaoMedicao: toIsoDate(get(row, idxDataAprovacaoMedicao)),
-          emitidoFatura: bool(get(row, idxEmitidoFatura)),
-          equipamentoTipo: str(get(row, idxEquipamento)),
-          placa: str(get(row, idxPlaca)),
-          gerente: str(get(row, idxGerente)),
-          obra: str(get(row, idxObra)),
-          inicioOriginal: toIsoDate(get(row, idxInicioOriginal)),
-          terminoOriginal: toIsoDate(get(row, idxTerminoOriginal)),
-          diasOriginal: num(get(row, idxDiasOriginal)),
-          inicioAjustado: toIsoDate(get(row, idxInicioAjustado)) || toIsoDate(get(row, idxInicioOriginal)),
-          terminoAjustado: toIsoDate(get(row, idxTerminoAjustado)) || toIsoDate(get(row, idxTerminoOriginal)),
-          dias: num(get(row, idxDiasAjustado)),
-          valorHora: num(get(row, idxValorHora)),
-          horasContratuais: num(get(row, idxHorasContratuais)),
-          mobi: num(get(row, idxMobi)) || 0,
-          desmobi: num(get(row, idxDesmobi)) || 0,
-          valorProvisionado: num(get(row, idxValorProvisionado)) || 0,
-          receita: num(get(row, idxReceita)) || 0,
-          projecaoAnual: num(get(row, idxProjecaoAnual)) || 0,
-          crescimento: num(get(row, idxCrescimento)),
-          fornecedorTerceiro: '',
-          custoHoraTerceiro: num(get(row, idxCustoHoraTerceiro)) || 0,
-          horasTerceiro: num(get(row, idxHorasTerceiro)) || 0,
-          custoTerceiro: num(get(row, idxCustoTerceiro)) || 0,
-          statusFatura: normalizeStatus(get(row, idxStatusFatura)),
-          numeroNf: str(get(row, idxNumeroNf)),
-          numeroLocacao: str(get(row, idxNumeroLocacao)),
-          mesFaturamento: str(get(row, idxMesFaturamento)),
-          observacoes: str(get(row, idxObservacoes)),
-        })).filter((r) => r.cliente || r.numeroPlano);
-
-        resolve(parsed);
+        resolve(parseWorkbookRows(wb));
       } catch (err) {
         reject(err);
       }

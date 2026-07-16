@@ -20,7 +20,7 @@ export default function Usuarios() {
 
   const load = async () => {
     setLoading(true);
-    const { data, error } = await supabase.from('usuarios').select('*').order('nome');
+    const { data, error } = await supabase.from('po_usuarios').select('*').order('nome');
     if (error) toast?.error(`Erro ao carregar usuários: ${error.message}`);
     setUsuarios(data || []);
     setLoading(false);
@@ -31,7 +31,7 @@ export default function Usuarios() {
   const handleAdd = async (e) => {
     e.preventDefault();
     setSaving(true);
-    const { error } = await supabase.from('usuarios').insert(form);
+    const { error } = await supabase.from('po_usuarios').insert(form);
     setSaving(false);
     if (error) { toast?.error(`Erro ao criar usuário: ${error.message}`); return; }
     toast?.success('Usuário criado');
@@ -41,7 +41,7 @@ export default function Usuarios() {
 
   const handleDelete = async (id) => {
     if (!window.confirm('Excluir este usuário?')) return;
-    const { error } = await supabase.from('usuarios').delete().eq('id', id);
+    const { error } = await supabase.from('po_usuarios').delete().eq('id', id);
     if (error) { toast?.error(`Erro ao excluir: ${error.message}`); return; }
     load();
   };
