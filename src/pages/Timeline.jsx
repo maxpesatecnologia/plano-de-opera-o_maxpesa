@@ -35,8 +35,18 @@ function computeStages(plano) {
 }
 
 export default function Timeline() {
-  const { planos, loading } = usePlano();
-  const ativos = useMemo(() => planos.filter((p) => p.status_fatura !== 'faturado').slice(0, 50), [planos]);
+  const { planos, loading, buscaGlobal } = usePlano();
+  const ativos = useMemo(() => {
+    const busca = buscaGlobal.trim().toLowerCase();
+    return planos
+      .filter((p) => p.status_fatura !== 'faturado')
+      .filter((p) => {
+        if (!busca) return true;
+        const alvo = [p.cliente?.nome, p.numero_plano, p.equipamento?.placa].join(' ').toLowerCase();
+        return alvo.includes(busca);
+      })
+      .slice(0, 50);
+  }, [planos, buscaGlobal]);
 
   if (loading) return <div className="empty-state">Carregando...</div>;
 

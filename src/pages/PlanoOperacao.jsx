@@ -4,7 +4,7 @@ import {
   Search, Upload, FileDown, FileSpreadsheet, FileText, Pencil, Trash2, Eye, Copy, AlertTriangle,
 } from 'lucide-react';
 import { usePlano } from '../context/PlanoContext';
-import { formatCurrency, formatDate } from '../lib/formatters';
+import { formatCurrency, formatDate, parseDate } from '../lib/formatters';
 import { computeAlertas } from '../lib/kpis';
 import { exportPlanosToExcel } from '../lib/excelParser';
 import { exportPlanosToCsv, exportPlanosToPdf } from '../lib/exporters';
@@ -37,8 +37,9 @@ export default function PlanoOperacao() {
       if (filtros.equipamento && p.equipamento_id !== filtros.equipamento) return false;
       if (filtros.cidade && p.obra?.cidade !== filtros.cidade) return false;
       if (filtros.status && p.status_fatura !== filtros.status) return false;
-      if (filtros.mes && p.inicio_ajustado && new Date(p.inicio_ajustado).getMonth() + 1 !== Number(filtros.mes)) return false;
-      if (filtros.ano && p.inicio_ajustado && new Date(p.inicio_ajustado).getFullYear() !== Number(filtros.ano)) return false;
+      const inicio = parseDate(p.inicio_ajustado);
+      if (filtros.mes && inicio && inicio.getUTCMonth() + 1 !== Number(filtros.mes)) return false;
+      if (filtros.ano && inicio && inicio.getUTCFullYear() !== Number(filtros.ano)) return false;
 
       if (busca) {
         const alvo = [
@@ -52,7 +53,7 @@ export default function PlanoOperacao() {
   }, [planos, filtros, busca]);
 
   const anos = useMemo(() => {
-    const set = new Set(planos.map((p) => p.inicio_ajustado && new Date(p.inicio_ajustado).getFullYear()).filter(Boolean));
+    const set = new Set(planos.map((p) => parseDate(p.inicio_ajustado)?.getUTCFullYear()).filter(Boolean));
     return [...set].sort();
   }, [planos]);
 

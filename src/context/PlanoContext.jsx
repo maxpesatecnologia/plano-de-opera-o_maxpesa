@@ -26,6 +26,7 @@ export const PlanoProvider = ({ children }) => {
   const [equipamentos, setEquipamentos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [buscaGlobal, setBuscaGlobal] = useState('');
 
   const loadLookups = useCallback(async () => {
     try {
@@ -255,6 +256,7 @@ export const PlanoProvider = ({ children }) => {
   const value = {
     planos, clientes, gerentes, obras, equipamentos,
     loading, importing,
+    buscaGlobal, setBuscaGlobal,
     loadAll, addPlano, updatePlano, deletePlano, duplicatePlano, bulkImportPlanos, saveFromForm,
   };
 

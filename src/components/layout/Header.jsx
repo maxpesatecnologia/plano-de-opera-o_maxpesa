@@ -1,6 +1,7 @@
 import React from 'react';
 import { Menu, Search } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { usePlano } from '../../context/PlanoContext';
 import './layout.css';
 
 const TITLES = {
@@ -18,6 +19,7 @@ const TITLES = {
 
 const Header = ({ onMenuClick }) => {
   const { pathname } = useLocation();
+  const { buscaGlobal, setBuscaGlobal } = usePlano();
   const title = TITLES[pathname] || 'Plano de Operação';
 
   return (
@@ -33,7 +35,12 @@ const Header = ({ onMenuClick }) => {
       <div className="header-right">
         <div className="header-search">
           <Search size={16} />
-          <input type="text" placeholder="Pesquisar cliente, plano, placa..." />
+          <input
+            type="text"
+            placeholder="Pesquisar cliente, plano, placa..."
+            value={buscaGlobal}
+            onChange={(e) => setBuscaGlobal(e.target.value)}
+          />
         </div>
         <div className="profile-container">
           <div className="profile-avatar" title="Usuário">U</div>
