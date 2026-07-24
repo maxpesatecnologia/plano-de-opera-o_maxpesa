@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -7,7 +7,9 @@ import { MapContainer, TileLayer, CircleMarker, Tooltip as LeafletTooltip } from
 import 'leaflet/dist/leaflet.css';
 import { usePlano } from '../context/PlanoContext';
 import { computeIndicadores } from '../lib/kpis';
-import { formatCurrency, formatDate } from '../lib/formatters';
+import { formatCurrency } from '../lib/formatters';
+import { emptyFiltros, filtrarPlanos } from '../lib/planoFilters';
+import FiltrosPlanos from '../components/plano/FiltrosPlanos';
 import './Dashboard.css';
 
 const COLORS = ['#E30613', '#3182CE', '#FF6A00', '#38A169', '#805AD5', '#D69E2E'];
@@ -30,17 +32,22 @@ function groupSum(items, keyFn, valueFn) {
 }
 
 export default function Dashboard() {
-  const { planos, clientes, equipamentos, loading } = usePlano();
+  const { planos, clientes, gerentes, equipamentos, loading } = usePlano();
 
-  const kpis = useMemo(() => computeIndicadores(planos), [planos]);
+  const [busca, setBusca] = useState('');
+  const [filtros, setFiltros] = useState(emptyFiltros());
+
+  const filtrados = useMemo(() => filtrarPlanos(planos, filtros, busca), [planos, filtros, busca]);
+
+  const kpis = useMemo(() => computeIndicadores(filtrados), [filtrados]);
 
   const receitaPorCliente = useMemo(
-    () => groupSum(planos, (p) => p.cliente?.nome, (p) => p.receita).sort((a, b) => b.value - a.value).slice(0, 12),
-    [planos]
+    () => groupSum(filtrados, (p) => p.cliente?.nome, (p) => p.receita).sort((a, b) => b.value - a.value).slice(0, 12),
+    [filtrados]
   );
 
   const receitaMensal = useMemo(() => {
-    const faturamentos = planos.flatMap((p) => p.faturamentos || []);
+    const faturamentos = filtrados.flatMap((p) => p.faturamentos || []);
     const map = new Map();
     faturamentos.forEach((f) => {
       if (!f.data_emissao) return;
@@ -51,25 +58,25 @@ export default function Dashboard() {
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-12)
       .map(([mes, valor]) => ({ mes, valor }));
-  }, [planos]);
+  }, [filtrados]);
 
   const statusFaturas = useMemo(() => {
     const map = new Map();
-    planos.forEach((p) => {
+    filtrados.forEach((p) => {
       const label = STATUS_LABELS[p.status_fatura] || 'Pendente';
       map.set(label, (map.get(label) || 0) + 1);
     });
     return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
-  }, [planos]);
+  }, [filtrados]);
 
   const receitaPorGerente = useMemo(
-    () => groupSum(planos, (p) => p.gerente?.nome, (p) => p.receita).sort((a, b) => b.value - a.value).slice(0, 10),
-    [planos]
+    () => groupSum(filtrados, (p) => p.gerente?.nome, (p) => p.receita).sort((a, b) => b.value - a.value).slice(0, 10),
+    [filtrados]
   );
 
   const obrasComReceita = useMemo(() => {
     const map = new Map();
-    planos.forEach((p) => {
+    filtrados.forEach((p) => {
       if (!p.obra?.lat || !p.obra?.lng) return;
       const key = p.obra.id;
       const existing = map.get(key) || { ...p.obra, receita: 0 };
@@ -77,18 +84,38 @@ export default function Dashboard() {
       map.set(key, existing);
     });
     return Array.from(map.values());
-  }, [planos]);
+  }, [filtrados]);
 
   const top10Clientes = useMemo(
-    () => groupSum(planos, (p) => p.cliente?.nome, (p) => p.receita).sort((a, b) => b.value - a.value).slice(0, 10),
-    [planos]
+    () => groupSum(filtrados, (p) => p.cliente?.nome, (p) => p.receita).sort((a, b) => b.value - a.value).slice(0, 10),
+    [filtrados]
   );
   const maxTop10 = top10Clientes[0]?.value || 1;
+
+  const totalEquipamentosFiltrados = useMemo(
+    () => new Set(filtrados.map((p) => p.equipamento_id).filter(Boolean)).size,
+    [filtrados]
+  );
+  const totalClientesFiltrados = useMemo(
+    () => new Set(filtrados.map((p) => p.cliente_id).filter(Boolean)).size,
+    [filtrados]
+  );
 
   if (loading) return <div className="empty-state">Carregando dashboard...</div>;
 
   return (
     <div>
+      <FiltrosPlanos
+        planos={planos}
+        clientes={clientes}
+        gerentes={gerentes}
+        equipamentos={equipamentos}
+        filtros={filtros}
+        setFiltros={setFiltros}
+        busca={busca}
+        setBusca={setBusca}
+      />
+
       <div className="kpi-grid">
         <KpiCard label="Total de Planos" value={kpis.totalPlanos} />
         <KpiCard label="Operações Ativas" value={kpis.operacoesAtivas} variant="success" />
@@ -97,14 +124,16 @@ export default function Dashboard() {
         <KpiCard label="Receita Faturada" value={formatCurrency(kpis.receitaFaturada, { abbreviate: true })} variant="success" />
         <KpiCard label="Receita em Aberto" value={formatCurrency(kpis.receitaEmAberto, { abbreviate: true })} variant="warning" />
         <KpiCard label="Valor Provisionado" value={formatCurrency(kpis.receitaProvisionada, { abbreviate: true })} variant="info" />
-        <KpiCard label="Total de Equipamentos" value={equipamentos.length} />
-        <KpiCard label="Total de Clientes" value={clientes.length} />
+        <KpiCard label="Total de Equipamentos" value={totalEquipamentosFiltrados} />
+        <KpiCard label="Total de Clientes" value={totalClientesFiltrados} />
       </div>
 
-      {planos.length === 0 ? (
+      {filtrados.length === 0 ? (
         <div className="empty-state">
-          Nenhum plano cadastrado ainda. Use a tela <strong>Cadastro</strong> ou importe a planilha Excel em{' '}
-          <strong>Plano de Operação</strong> para começar a ver os gráficos.
+          {planos.length === 0
+            ? <>Nenhum plano cadastrado ainda. Use a tela <strong>Cadastro</strong> ou importe a planilha Excel em{' '}
+              <strong>Plano de Operação</strong> para começar a ver os gráficos.</>
+            : 'Nenhum plano encontrado com esses filtros.'}
         </div>
       ) : (
         <div className="charts-grid">

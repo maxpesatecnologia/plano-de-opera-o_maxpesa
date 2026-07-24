@@ -33,15 +33,17 @@ const Header = ({ onMenuClick }) => {
       </div>
 
       <div className="header-right">
-        <div className="header-search">
-          <Search size={16} />
-          <input
-            type="text"
-            placeholder="Pesquisar cliente, plano, placa..."
-            value={buscaGlobal}
-            onChange={(e) => setBuscaGlobal(e.target.value)}
-          />
-        </div>
+        {pathname !== '/plano-operacao' && (
+          <div className="header-search">
+            <Search size={16} />
+            <input
+              type="text"
+              placeholder="Pesquisar cliente, plano, placa..."
+              value={buscaGlobal}
+              onChange={(e) => setBuscaGlobal(e.target.value)}
+            />
+          </div>
+        )}
         <div className="profile-container">
           <div className="profile-avatar" title="Usuário">U</div>
         </div>
